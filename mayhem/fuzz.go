@@ -3,7 +3,6 @@ package fuzz
 import "strconv"
 import "github.com/tigera/operator/pkg/render/common/podaffinity"
 import "github.com/tigera/operator/pkg/dns"
-import "github.com/tigera/operator/pkg/controller/status"
 import "github.com/tigera/operator/pkg/url"
 
 func mayhemit(bytes []byte) int {
@@ -22,12 +21,6 @@ func mayhemit(bytes []byte) int {
         case 1:
             content := string(bytes)
             dns.GetClusterDomain(content)
-            return 0
-
-        case 2:
-            content := string(bytes)
-            var test status.MockStatus
-            test.RemoveCertificateSigningRequests(content)
             return 0
 
         default:
