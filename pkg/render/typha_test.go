@@ -22,6 +22,7 @@ import (
 	"github.com/onsi/gomega/gstruct"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/ptr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -82,7 +83,7 @@ var _ = Describe("Typha rendering tests", func() {
 
 		// Should not contain any PodSecurityPolicies
 		for _, r := range resources {
-			Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 		}
 	})
 
@@ -151,7 +152,7 @@ var _ = Describe("Typha rendering tests", func() {
 		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 
-		// The DaemonSet should have the correct configuration.
+		// The Deployment should have the correct configuration.
 		d := dResource.(*appsv1.Deployment)
 		paa := d.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 		Expect(paa).To(ContainElement(corev1.PodAffinityTerm{
@@ -160,6 +161,16 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 			Namespaces:  []string{"kube-system"},
 			TopologyKey: "kubernetes.io/hostname",
+		}))
+
+		Expect(*d.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(int64(300 /* our default*/)))
+		Expect(*d.Spec.ProgressDeadlineSeconds).To(Equal(int32(600 /*k8s default*/)))
+		Expect(d.Spec.Strategy).To(Equal(appsv1.DeploymentStrategy{
+			Type: appsv1.RollingUpdateDeploymentStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDeployment{
+				MaxSurge:       ptr.IntOrStrPtr("100%"),
+				MaxUnavailable: ptr.IntOrStrPtr("1"),
+			},
 		}))
 	})
 	It("should set TIGERA_*_SECURITY_GROUP variables when AmazonCloudIntegration is defined", func() {
@@ -426,7 +437,7 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	Context("With typha deployment overrides", func() {
-		var rr1 = corev1.ResourceRequirements{
+		rr1 := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":     resource.MustParse("2"),
 				"memory":  resource.MustParse("300Mi"),
@@ -438,7 +449,7 @@ var _ = Describe("Typha rendering tests", func() {
 				"storage": resource.MustParse("10Gi"),
 			},
 		}
-		var rr2 = corev1.ResourceRequirements{
+		rr2 := corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("250m"),
 				corev1.ResourceMemory: resource.MustParse("64Mi"),
@@ -470,6 +481,8 @@ var _ = Describe("Typha rendering tests", func() {
 				Value:    "bar",
 			}
 
+			termGracePeriod := int64(700)
+
 			installation.TyphaDeployment = &operatorv1.TyphaDeployment{
 				Metadata: &operatorv1.Metadata{
 					Labels:      map[string]string{"top-level": "label1"},
@@ -477,12 +490,19 @@ var _ = Describe("Typha rendering tests", func() {
 				},
 				Spec: &operatorv1.TyphaDeploymentSpec{
 					MinReadySeconds: &minReadySeconds,
+					Strategy: &operatorv1.TyphaDeploymentStrategy{
+						RollingUpdate: &appsv1.RollingUpdateDeployment{
+							MaxSurge:       ptr.IntOrStrPtr("2"),
+							MaxUnavailable: ptr.IntOrStrPtr("0"),
+						},
+					},
 					Template: &operatorv1.TyphaDeploymentPodTemplateSpec{
 						Metadata: &operatorv1.Metadata{
 							Labels:      map[string]string{"template-level": "label2"},
 							Annotations: map[string]string{"template-level": "annot2"},
 						},
 						Spec: &operatorv1.TyphaDeploymentPodSpec{
+							TerminationGracePeriodSeconds: &termGracePeriod,
 							Containers: []operatorv1.TyphaDeploymentContainer{
 								{
 									Name:      "calico-typha",
@@ -491,6 +511,11 @@ var _ = Describe("Typha rendering tests", func() {
 							},
 							NodeSelector: map[string]string{
 								"custom-node-selector": "value",
+							},
+							TopologySpreadConstraints: []corev1.TopologySpreadConstraint{
+								{
+									MaxSkew: 1,
+								},
 							},
 							Affinity:    affinity,
 							Tolerations: []corev1.Toleration{toleration},
@@ -514,6 +539,13 @@ var _ = Describe("Typha rendering tests", func() {
 			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
 
 			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
+			Expect(d.Spec.Strategy).To(Equal(appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       ptr.IntOrStrPtr("2"),
+					MaxUnavailable: ptr.IntOrStrPtr("0"),
+				},
+			}))
 
 			// At runtime, the operator will also add some standard labels to the
 			// deployment such as "k8s-app=calico-typha". But the deployment object
@@ -537,8 +569,24 @@ var _ = Describe("Typha rendering tests", func() {
 			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
 
+			Expect(d.Spec.Template.Spec.TopologySpreadConstraints).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.TopologySpreadConstraints[0].MaxSkew).To(Equal(int32(1)))
+
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+
+			Expect(*d.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(termGracePeriod))
+			expProgDeadline := int32(700 * 120 / 100)
+			Expect(*d.Spec.ProgressDeadlineSeconds).To(Equal(expProgDeadline))
+			found := false
+			for _, ev := range d.Spec.Template.Spec.Containers[0].Env {
+				if ev.Name == "TYPHA_SHUTDOWNTIMEOUTSECS" {
+					Expect(found).To(BeFalse(), "Typha deployment had duplicate TYPHA_SHUTDOWNTIMEOUTSECS env var")
+					Expect(ev.Value).To(Equal("700"))
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue(), "Typha deployment was missing TYPHA_SHUTDOWNTIMEOUTSECS env var")
 		})
 
 		It("should override ComponentResources", func() {

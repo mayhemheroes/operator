@@ -139,7 +139,7 @@ var _ = Describe("Node rendering tests", func() {
 
 				// Should not contain any PodSecurityPolicies
 				for _, r := range resources {
-					Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
+					Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 				}
 			})
 
@@ -1921,6 +1921,10 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
 				verifyProbesAndLifecycle(ds, true, true)
+
+				// The metrics service should have the correct configuration.
+				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
+				Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 			})
 
 			It("should render volumes and node volumemounts when bird templates are provided", func() {
@@ -3218,7 +3222,7 @@ var _ = Describe("Node rendering tests", func() {
 			})
 
 			Context("With calico-node DaemonSet overrides", func() {
-				var rr1 = corev1.ResourceRequirements{
+				rr1 := corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						"cpu":     resource.MustParse("2"),
 						"memory":  resource.MustParse("300Mi"),
@@ -3230,7 +3234,7 @@ var _ = Describe("Node rendering tests", func() {
 						"storage": resource.MustParse("10Gi"),
 					},
 				}
-				var rr2 = corev1.ResourceRequirements{
+				rr2 := corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("250m"),
 						corev1.ResourceMemory: resource.MustParse("64Mi"),
@@ -3478,7 +3482,8 @@ func configureExpectedNodeEnvIPVersions(expectedNodeEnv []corev1.EnvVar, default
 	} else {
 		expectedNodeEnv = append(expectedNodeEnv, []corev1.EnvVar{
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
-			{Name: "IP6", Value: "none"}}...)
+			{Name: "IP6", Value: "none"},
+		}...)
 	}
 
 	return expectedNodeEnv

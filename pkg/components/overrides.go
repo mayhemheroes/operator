@@ -16,7 +16,7 @@ package components
 
 import (
 	opv1 "github.com/tigera/operator/api/v1"
-
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -45,6 +45,13 @@ type ReplicatedPodResourceOverrides interface {
 	// GetNodeSelector returns the value used to override a DaemonSet/Deployment's nodeSelector.
 	GetNodeSelector() map[string]string
 
+	// GetTopologySpreadConstraints returns topology spread constraints to use.
+	GetTopologySpreadConstraints() []corev1.TopologySpreadConstraint
+
 	// GetTolerations returns the value used to override a DaemonSet/Deployment's tolerations.
 	GetTolerations() []corev1.Toleration
+
+	GetTerminationGracePeriodSeconds() *int64
+
+	GetDeploymentStrategy() *appsv1.DeploymentStrategy
 }

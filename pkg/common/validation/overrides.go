@@ -75,9 +75,26 @@ func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodRe
 			return fmt.Errorf("spec.Template.Spec.NodeSelector is invalid: %w", err.ToAggregate())
 		}
 	}
+	if topologySpreadConstraints := overrides.GetTopologySpreadConstraints(); len(topologySpreadConstraints) > 0 {
+		if err := k8svalidation.ValidateTopologySpreadConstraints(topologySpreadConstraints, field.NewPath("spec", "template", "spec", "topologySpreadConstraints")); err.ToAggregate() != nil {
+			return fmt.Errorf("spec.Template.Spec.TopologySpreadConstraints is invalid: %w", err.ToAggregate())
+		}
+	}
+
 	if tolerations := overrides.GetTolerations(); len(tolerations) > 0 {
 		if errs := k8svalidation.ValidateTolerations(tolerations, field.NewPath("spec", "template", "spec", "tolerations")); errs.ToAggregate() != nil {
 			return fmt.Errorf("spec.Template.Spec.Tolerations is invalid: %w", errs.ToAggregate())
+		}
+	}
+
+	tgp := overrides.GetTerminationGracePeriodSeconds()
+	if tgp != nil && *tgp < 0 {
+		return fmt.Errorf("spec.Template.Spec.TerminationGracePeriodSeconds is invalid: cannot be negative")
+	}
+
+	if st := overrides.GetDeploymentStrategy(); st != nil {
+		if err := k8svalidation.ValidateDeploymentStrategy(st, field.NewPath("spec", "strategy")); err.ToAggregate() != nil {
+			return fmt.Errorf("spec.Strategy is invalid: %w", err.ToAggregate())
 		}
 	}
 

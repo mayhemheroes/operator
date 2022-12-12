@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -164,6 +165,13 @@ func (c *CalicoKubeControllersDeployment) GetAffinity() *v1.Affinity {
 	return nil
 }
 
+func (c *CalicoKubeControllersDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	// TopologySpreadConstraints don't apply to kube-controllers since we only ever run a single
+	// replica of this deployment. kube-controllers is designed to be a singleton. Other scheduling
+	// mechanisms like node selector and tolerations should be used instead.
+	return nil
+}
+
 func (c *CalicoKubeControllersDeployment) GetNodeSelector() map[string]string {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {
@@ -183,5 +191,13 @@ func (c *CalicoKubeControllersDeployment) GetTolerations() []v1.Toleration {
 			}
 		}
 	}
+	return nil
+}
+
+func (c *CalicoKubeControllersDeployment) GetTerminationGracePeriodSeconds() *int64 {
+	return nil
+}
+
+func (c *CalicoKubeControllersDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
