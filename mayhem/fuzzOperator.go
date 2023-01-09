@@ -1,4 +1,4 @@
-package fuzz
+package fuzzOperator
 
 import "strconv"
 import "github.com/tigera/operator/pkg/render/common/podaffinity"
