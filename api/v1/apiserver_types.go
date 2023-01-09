@@ -18,6 +18,7 @@ limitations under the License.
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -125,6 +126,12 @@ type APIServerDeploymentPodSpec struct {
 	// If omitted, the API server Deployment will use its default value for nodeSelector.
 	// WARNING: Please note that this field will modify the default API server Deployment nodeSelector.
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// TopologySpreadConstraints describes how a group of pods ought to spread across topology
+	// domains. Scheduler will schedule pods in a way which abides by the constraints.
+	// All topologySpreadConstraints are ANDed.
+	// +optional
+	TopologySpreadConstraints []v1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 
 	// Tolerations is the API server pod's tolerations.
 	// If specified, this overrides any tolerations that may be set on the API server Deployment.
@@ -248,6 +255,17 @@ func (c *APIServerDeployment) GetAffinity() *v1.Affinity {
 	return nil
 }
 
+func (c *APIServerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.TopologySpreadConstraints
+			}
+		}
+	}
+	return nil
+}
+
 func (c *APIServerDeployment) GetNodeSelector() map[string]string {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {
@@ -267,5 +285,13 @@ func (c *APIServerDeployment) GetTolerations() []v1.Toleration {
 			}
 		}
 	}
+	return nil
+}
+
+func (c *APIServerDeployment) GetTerminationGracePeriodSeconds() *int64 {
+	return nil
+}
+
+func (c *APIServerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

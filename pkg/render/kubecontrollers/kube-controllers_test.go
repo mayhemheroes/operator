@@ -17,13 +17,11 @@ package kubecontrollers_test
 import (
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/types"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -143,7 +141,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		// Should not contain any PodSecurityPolicies
 		for _, r := range resources {
-			Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 		}
 	})
 
@@ -252,6 +250,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(clusterRole.Rules)).To(Equal(19))
+
+		ms := rtest.GetResource(resources, kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, "", "v1", "Service").(*corev1.Service)
+		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless")
 	})
 
 	It("should render all es-calico-kube-controllers resources for a default configuration (standalone) using TigeraSecureEnterprise when logstorage and secrets exist", func() {
@@ -841,6 +842,20 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(depResource).ToNot(BeNil())
 		deployment := depResource.(*appsv1.Deployment)
 		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
+	})
+
+	It("should add prometheus annotations to metrics service", func() {
+		for _, variant := range []operatorv1.ProductVariant{operatorv1.Calico, operatorv1.TigeraSecureEnterprise} {
+			cfg.Installation.Variant = variant
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			obj := rtest.GetResource(resources, kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, "", "v1", "Service")
+			Expect(obj).ToNot(BeNil())
+			svc := obj.(*corev1.Service)
+			Expect(svc.Annotations["prometheus.io/scrape"]).To(Equal("true"))
+			Expect(svc.Annotations["prometheus.io/port"]).To(Equal(fmt.Sprintf("%d", cfg.MetricsPort)))
+		}
 	})
 
 	Context("kube-controllers allow-tigera rendering", func() {
