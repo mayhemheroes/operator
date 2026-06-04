@@ -1,4 +1,6 @@
-FROM golang:1.25 as builder
+FROM golang:1.26 as builder
+
+ENV GOTOOLCHAIN=auto
 
 COPY . /operator
 WORKDIR /operator/mayhem

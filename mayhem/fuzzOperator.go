@@ -16,7 +16,7 @@ func mayhemit(bytes []byte) int {
     
         case 0:
             content := string(bytes)
-            podaffinity.NewPodAntiAffinity(content, "mayhem")
+            podaffinity.NewPodAntiAffinity(content, []string{"mayhem"})
             return 0
 
         case 1:
